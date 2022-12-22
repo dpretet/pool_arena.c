@@ -1,7 +1,10 @@
 // distributed under the mit license
 // https://opensource.org/licenses/mit-license.php
 
-/*
+#ifndef MALLOC_INCLUDE
+#define MALLOC_INCLUDE
+
+/* -----------------------------------------------------------------------------------------------
 
 # OVERVIEW
 
@@ -70,200 +73,78 @@ Parse the free space to find a chunk. Check if current block can contain the req
 
 ## free()
 
-If next block is contiguous, merge it.
+1. Locate the block to free accross the chained list. nxt/prv pointers are used to move until
+   the position is found. Ensure the block is not the last or the first around the space boundary
+2. If next block is contiguous, merge it:
   - Erase next block info if existing
   - Add current block size with next block size
-
-If previous block is contiguous, merge it:
+  - Update next.nxt block to point to the new current block address
+3. If previous block is contiguous, merge it:
   - update the size of the previous block by adding the chunk size
+  - update the current.nxt block's prv pointer to the new merged block address
 
-TODO:
-- support small array size, like one int (4 bytes), so nxt/prv can't fit into.
-  needs to allocate at least 3 * registers
-- compute the size with address, so gather small blocks if smaller than 4 registers
-- how to handle release of blocks, fragmented, small space still available between 2 blocks
-- free can erase a block (secure erase)
-- add calloc(), malloc() + erase()
-- always align on architecture boundary
-- use a binary tree to search for fastly free space on allocation?
+# TODO:
+
+[X] always align on architecture boundary
+[X] support small array size, like one int (4 bytes), so nxt/prv can't fit into.
+    needs to allocate at least 3 * registers
+[-] how to handle release of blocks, fragmented, small space still available between 2 blocks
+[ ] function to check the arena usage for testing purpose
+[ ] monitor / record used vs free space on alloc/free calls
+[ ] free can erase a block (secure erase)
+[ ] add calloc(), malloc() + erase()
+[ ] prepare some zone with known size
+[ ] use a binary tree to search for fastly free space on allocation?
     - needs parent reg + 2 children regs, 1 more than linked list
     - could speed very much parsing of the free blocks
     - can ease defragmentation process (if needed)
-- function to defragment the heap?
-- function to check the heap usage
-- monitor / record used vs free space on alloc/free calls
-- store biggest free space address
-- store smallest free space address
 
-*/
-
-#include <stdio.h>
-
-// The basic data structure describing a heap free space element
-struct blk {
-    // Size of the data payload
-    int size;
-    // Pointer to the previous block. 0 means not assigned
-    void * prv;
-    // Pointer to the next block. 0 means not assigned
-    void * nxt;
-};
-
-typedef struct blk blk_t;
-
-// Size of a memory element
-const static int reg_size = sizeof(void *);
-// Size of a block header
-const static int header_size = 3 * reg_size;
-
-// Current block of the heap
-static blk_t * current;
-static blk_t * tmp;
-
-// Used to store the original block address before parsing the free space blocks
-static int org;
-// Used to remember the biggest and smallest blocks' address, used to parse the heap list
-static void * biggest;
-static void * smallest;
-
-// Used to track heap status during usage and check if no leaks occcur
-static int heap_size;
-static int heap_allocated;
-static int heap_free;
-
+ ----------------------------------------------------------------------------------------------- */
 
 // -----------------------------------------------------------------------------------------------
-// Allocate in the heap a buffer of _size_ bytes. Memory blocked reserved in memory are always
+// Called by the environment to setup the arena start address
+// To call once when the system boots up or when creating
+// a new pool arena.
+//
+// Arguments:
+//  - addr: address of the arena's first byte
+//  - size: size in byte available for the arena
+// Returns:
+//  - -1 if size is too small to contain at least 1 byte, otherwise 0
+// -----------------------------------------------------------------------------------------------
+int pool_init(void * addr, int size);
+
+// -----------------------------------------------------------------------------------------------
+// Allocates in the arena a buffer of _size_ bytes. Memory blocked reserved in memory are always
 // boundary aligned with the hw architecture, so 4 bytes for 32 bits architecture, or 8 bytes
-// for 64 bits architecture.
+// for 64 bits architecture. Use first-fit startegy for the moment (but could use best-fit).
 //
 // Argument:
 //  - size: the number of bytes the block needs to own
 // Returns:
 //  - the address of the buffer's first byte, otherwise -1 if failed
 // -----------------------------------------------------------------------------------------------
-void * _malloc(int size) {
-
-    // Read the current block info to check if can store the payload
-    //  - if not, parse the blocks until finding one
-    //  - if don't find a block, return -1
-    // Fork the space and create a new block
-    //  - in original block, store in next the new block address in nxt
-    //  - in new block, store the original block address in prv
-    // Move curr pointer after the new block
-    //  - init the size to 0
-    // To check when manipulating the block:
-    //  - prv = 0, meaning we are at the beginning of the pool
-    //  - nxt = 0, meaning we reach the end of the pool
-    //  - prv = -1, meaning previous block is allocated (pool beginning and first block allocated)
-    //  - nxt = -1, meaning next block is allocated (pool end and last block is allocated)
-
-    // Return -1 if failed to allocate a buffer
-    if (current->size <= (size + header_size))
-        return (void *)(-1);
-
-    int _size;
-    void * ret;
-    void * prv_pt;
-    void * nxt_pt;
-    int new_size;
-
-    // Ensure the requested size is not lower than a register
-    // So stay boundary align and avoid misalignment
-    // TODO: round up next boundary, i.e. 24 bytes >> 32 bytes
-    _size = size;
-    if (size<reg_size)
-        _size = reg_size;
-
-    // Payload address the application can use
-    ret = (char *)current + header_size;
-    printf("Malloc:\n");
-    printf("  - current: %p\n", current);
-    printf("  - header_size: %x\n", header_size);
-    printf("  - blk size: %x\n", _size);
-    printf("  - pt = %p\n", ret);
-
-    // Update monitoring
-    heap_allocated += _size;
-
-    // Store current info before moving its head
-    nxt_pt = current->nxt;
-    prv_pt = current->prv;
-    new_size = current->size - header_size - _size;
-
-    // Adjust free space of current block and update its meta-data
-    current += header_size + size;
-    current->size = new_size;
-    current->prv = prv_pt;
-    current->nxt = nxt_pt;
-
-    // Update previous block to link current
-    if (current->prv) {
-        tmp = prv_pt;
-        tmp->nxt = current;
-    }
-    // Update next block to link current, only if exists
-    if (current->nxt) {
-        tmp = nxt_pt;
-        tmp->prv = current;
-    }
-
-    return ret;
-}
+void * pool_malloc(int size);
 
 // -----------------------------------------------------------------------------------------------
-// Free a block and make it available again for future use.
+// Releases a block and make it available again for future use.
 //
 // Arguments:
 //  - addr: the address of the data block
 // Returns:
 //  - 0 if block has been found (and so was a block), anything otherwise if failed
 // -----------------------------------------------------------------------------------------------
-int _free(/*void * addr*/) {
-
-    // blk_t * blk;
-    // blk = (char *)addr - header_size;
-
-    return 0;
-}
+int pool_free(void * addr);
 
 // -----------------------------------------------------------------------------------------------
-// Called by the environment to setup the heap start address
-// To call once when the system boots up or when creating
-// a new pool arena.
+// Check the free space setup during pool_init() is still completely available, even if free
+// space has been fragmented
 //
 // Arguments:
-//  - addr: address of the heap's first byte
-//  - size: size in byte available for the heap
+//	- None
 // Returns:
-//  - -1 if size is too small to contain at least 1 byte, otherwise 0
+// 	- 1 if space range is not equal to initial setup, 0 otherwise
 // -----------------------------------------------------------------------------------------------
-int heap_init(void * addr, int size) {
+int pool_check_free_space(void);
 
-    smallest = 0;
-    biggest = 0;
-    org = 0;
-
-    heap_size = size;
-    heap_free = size;
-    heap_allocated = 0;
-
-    current = addr;
-    current->size = size;
-    current->prv = 0;
-    current->nxt = 0;
-
-    if (size <= header_size)
-        return -1;
-
-    printf("Architecture/Library Setup:\n");
-    printf("  - reg_size: %d bytes\n", reg_size);
-    printf("  - header_size: %d bytes\n", header_size);
-
-    printf("Init pool arena:\n");
-    printf("  - addr: %p\n", addr);
-    printf("  - size: %d\n", current->size);
-    printf("  - prv: %p\n", current->prv);
-    printf("  - nxt: %p\n", current->nxt);
-    return 0;
-}
+#endif // MALLOC_INCLUDE

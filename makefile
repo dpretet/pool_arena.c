@@ -9,9 +9,9 @@ obj = $(src:.c=.o)
 CFLAGS = -Wall -Wextra -pedantic
 LDFLAGS =
 
-exe: $(obj)
+testsuite: $(obj)
 	$(CC) -o $@ $^ $(LDFLAGS)
 
 .PHONY: clean
 clean:
-	rm -f $(obj) exe
+	rm -f $(obj) testsuite
