@@ -54,3 +54,4 @@ dkms.conf
 exe
 .ccls*
 tags
+testsuite

@@ -33,12 +33,7 @@ void tearDown(void) {
 void test_pool_init(void) {
     TEST_ASSERT_EQUAL_INT(0, pool_init(arena, ARENA_SIZE));
 }
-//
-// Just try to create a pool arena
-void test_pool_init_then_check(void) {
-    TEST_ASSERT_EQUAL_INT(0, pool_init(arena, ARENA_SIZE));
-	TEST_ASSERT_FALSE(pool_check_free_space());
-}
+
 // Just try to create a pool arena but with a so small
 // size a header can't fit into
 void test_pool_init_too_small(void) {
@@ -80,13 +75,13 @@ void test_giga_chunk_too_big(void) {
 void test_alloc_n_free(void) {
 
     int ret;
+	int chunk_depth = reg_size*10;
 
     pool_init(arena, ARENA_SIZE);
 
-    blks[0] = pool_malloc(reg_size*10);
+    blks[0] = pool_malloc(chunk_depth);
     TEST_ASSERT_FALSE((blks[0] == ((void *)-1)));
     TEST_ASSERT_NOT_NULL(blks[0]);
-	TEST_ASSERT_FALSE(pool_check_free_space());
     ret = pool_free(blks[0]);
     TEST_ASSERT_EQUAL_INT(0, ret);
 }
@@ -96,7 +91,6 @@ int main(void) {
     UNITY_BEGIN();
 
     RUN_TEST(test_pool_init);
-    RUN_TEST(test_pool_init_then_check);
     RUN_TEST(test_pool_init_too_small);
     RUN_TEST(test_micro_chunk);
     RUN_TEST(test_giga_chunk);

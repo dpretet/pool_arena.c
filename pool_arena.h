@@ -145,6 +145,6 @@ int pool_free(void * addr);
 // Returns:
 // 	- 1 if space range is not equal to initial setup, 0 otherwise
 // -----------------------------------------------------------------------------------------------
-int pool_check_free_space(void);
+int pool_check_free_space(int used);
 
 #endif // MALLOC_INCLUDE

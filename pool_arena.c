@@ -51,13 +51,20 @@ static int pool_free_space;
 // -----------------------------------------------------------------------------------------------
 int pool_init(void * addr, int size) {
 
-    if (size <= header_size)
+	// addr is not a valid memory address
+	if (addr == NULL) {
+		return -1;
+	}
+
+	// size is too small, can't even store a header
+    if (size <= header_size) {
         return -1;
+	}
 
     tmp_blk = 0;
     tmp_pt = 0;
 
-	pool_size = size;
+	pool_size = size - reg_size;
     pool_free_space = size - reg_size;
     pool_allocated = 0;
 
@@ -75,10 +82,10 @@ int pool_init(void * addr, int size) {
 
     printf("Init pool arena:\n");
     printf("  - addr: %p\n", addr);
-    printf("  - addr: %p\n", current);
+    printf("  - addr: %p\n", (void *)current);
     printf("  - size: %d\n", current->size);
-    printf("  - prv: %p\n", current->prv);
-    printf("  - nxt: %p\n", current->nxt);
+    printf("  - prv: %p\n", (void *)current->prv);
+    printf("  - nxt: %p\n", (void *)current->nxt);
     printf("\n");
     /* #endif */
 
@@ -367,7 +374,7 @@ int pool_free(void * addr) {
     return 0;
 }
 
-int pool_check_free_space(void) {
+int pool_check_free_space(int used) {
 
 	// Size in bytes available in the pool
 	int size = 0;
@@ -383,8 +390,8 @@ int pool_check_free_space(void) {
 		printf("Free bloc Info:\n");
 		printf("	- addr: %p\n", tmp_pt);
 		printf("	- free space: %d\n", tmp_blk->size);
-		printf("	- prv: %p\n", tmp_blk->prv);
-		printf("	- nxt: %p\n", tmp_blk->nxt);
+		printf("	- prv: %p\n", (void *)tmp_blk->prv);
+		printf("	- nxt: %p\n", (void *)tmp_blk->nxt);
 
 		size += tmp_blk->size;
 		nb_fb += 1;
@@ -409,8 +416,8 @@ int pool_check_free_space(void) {
 		printf("Free bloc Info:\n");
 		printf("	- addr: %p\n", tmp_pt);
 		printf("	- free space: %d\n", tmp_blk->size);
-		printf("	- prv: %p\n", tmp_blk->prv);
-		printf("	- nxt: %p\n", tmp_blk->nxt);
+		printf("	- prv: %p\n", (void *)tmp_blk->prv);
+		printf("	- nxt: %p\n", (void *)tmp_blk->nxt);
 
 		size += tmp_blk->size;
 		nb_fb += 1;	
@@ -422,7 +429,7 @@ int pool_check_free_space(void) {
 		}
 	}
 	
-	size +=  nb_fb * reg_size;
+	size += used;
 
 	if (size != pool_size) {
 		/* #ifdef POOL_ARENA_DEBUG */
