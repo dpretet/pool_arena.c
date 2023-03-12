@@ -2,6 +2,7 @@
 // https://opensource.org/licenses/mit-license.php
 
 #include <stdio.h>
+#include <string.h>
 
 // -----------------------------------------------------------------------------------------------
 // Local declarations
@@ -202,18 +203,18 @@ void * pool_malloc(int size) {
 //
 // Follows the different cases to handle:
 //
-// ┌───────┬────────────────────────────────────────────┐          
-// │Block 0│          ~~~~~~~~ Free ~~~~~~~~~           │          
-// └───────┴────────────────────────────────────────────┘          
-// ┌────────────────────────────────────────────┬───────┐          
-// │          ~~~~~~~~ Free ~~~~~~~~~           │Block 0│          
-// └────────────────────────────────────────────┴───────┘          
-// ┌───────────────┬───────┬───────────────────────────┐          
-// │ ~~~ Free ~~~  │Block 0│  ~~~~~~~~ Free ~~~~~~~~   │          
-// └───────────────┴───────┴───────────────────────────┘          
-// ┌───────┬────────────────────────────────────┬───────┐          
-// │Block 0│      ~~~~~~~~ Free ~~~~~~~~~       │Block 1│          
-// └───────┴────────────────────────────────────┴───────┘          
+// ┌───────┬────────────────────────────────────────────┐
+// │Block 0│          ~~~~~~~~ Free ~~~~~~~~~           │
+// └───────┴────────────────────────────────────────────┘
+// ┌────────────────────────────────────────────┬───────┐
+// │          ~~~~~~~~ Free ~~~~~~~~~           │Block 0│
+// └────────────────────────────────────────────┴───────┘
+// ┌───────────────┬───────┬───────────────────────────┐
+// │ ~~~ Free ~~~  │Block 0│  ~~~~~~~~ Free ~~~~~~~~   │
+// └───────────────┴───────┴───────────────────────────┘
+// ┌───────┬────────────────────────────────────┬───────┐
+// │Block 0│      ~~~~~~~~ Free ~~~~~~~~~       │Block 1│
+// └───────┴────────────────────────────────────┴───────┘
 // ┌───────┬───────┬────────────────────┬───────┬────────┬───────┬───────┐
 // │Block 0│Block 1│   ~~~ Freee ~~~    │Block 2│~ Free ~│Block 3│Block 4│
 // └───────┴───────┴────────────────────┴───────┴────────┴───────┴───────┘
@@ -225,7 +226,7 @@ void * pool_malloc(int size) {
 //  - addr: pointer to an address to release
 // Returns:
 //  - a pointer to the location where to place the block to release. The place to use can be on the
-//    left or on the right of address passed
+//    left or on the right of address passed. If no place found, returns NULL
 //
 // -----------------------------------------------------------------------------------------------
 static inline void * get_loc_to_free(void * addr) {
@@ -312,12 +313,12 @@ int pool_free(void * addr) {
 			blk->nxt = free_blk->nxt;
 			blk->size += free_blk->size + header_size;
 			pool_free_space += reg_size;
-           	// If a next block exists, connect it 
+			// If a next block exists, connect it
 			if (blk->nxt != NULL) {
 				tmp_blk = blk->nxt;
 				tmp_blk->prv = blk_pt;
 			}
-			// If a previsou block exists, connect it 
+			// If a previsou block exists, connect it
 			if (blk->prv != NULL) {
 				tmp_blk = blk->prv;
 				tmp_blk->nxt = blk_pt;
@@ -408,7 +409,7 @@ int pool_check_free_space(int used) {
 	tmp_blk = tmp_pt;
 
 	size -= tmp_blk->size;
-	nb_fb -= 1;	
+	nb_fb -= 1;
 
 	printf("Parse nxt(s)\n");
 	while (1) {
@@ -420,7 +421,7 @@ int pool_check_free_space(int used) {
 		printf("	- nxt: %p\n", (void *)tmp_blk->nxt);
 
 		size += tmp_blk->size;
-		nb_fb += 1;	
+		nb_fb += 1;
 
 		if (tmp_blk->nxt != NULL) {
 			tmp_blk = tmp_blk->nxt;
@@ -428,7 +429,7 @@ int pool_check_free_space(int used) {
 			break;
 		}
 	}
-	
+
 	size += used;
 
 	if (size != pool_size) {
@@ -442,4 +443,18 @@ int pool_check_free_space(int used) {
 	}
 
 	return 0;
+}
+
+
+// memory allocation + clear
+void * pool_calloc(int size) {
+	void * ptr = NULL;
+	ptr = pool_malloc(size);
+
+	if (ptr == NULL)
+		return NULL;
+
+	memset(ptr, 0, size);
+
+	return ptr;
 }

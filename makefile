@@ -3,10 +3,10 @@
 
 # http://nuclear.mutantstargoat.com/articles/make/
 
-src = $(wildcard *.c)
+src = $(wildcard src/*.c test/*.c)
 obj = $(src:.c=.o)
 
-CFLAGS = -Wall -Wextra -pedantic
+CFLAGS = -Wall -Wextra -pedantic -I ./src
 LDFLAGS =
 
 testsuite: $(obj)

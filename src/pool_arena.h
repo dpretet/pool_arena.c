@@ -1,8 +1,8 @@
 // distributed under the mit license
 // https://opensource.org/licenses/mit-license.php
 
-#ifndef MALLOC_INCLUDE
-#define MALLOC_INCLUDE
+#ifndef POOL_ARENA_INCLUDE
+#define POOL_ARENA_INCLUDE
 
 /* -----------------------------------------------------------------------------------------------
 
@@ -82,23 +82,6 @@ Parse the free space to find a chunk. Check if current block can contain the req
 3. If previous block is contiguous, merge it:
   - update the size of the previous block by adding the chunk size
   - update the current.nxt block's prv pointer to the new merged block address
-
-# TODO:
-
-[X] always align on architecture boundary
-[X] support small array size, like one int (4 bytes), so nxt/prv can't fit into.
-    needs to allocate at least 3 * registers
-[-] how to handle release of blocks, fragmented, small space still available between 2 blocks
-[ ] function to check the arena usage for testing purpose
-[ ] monitor / record used vs free space on alloc/free calls
-[ ] free can erase a block (secure erase)
-[ ] add calloc(), malloc() + erase()
-[ ] prepare some zone with known size
-[ ] use a binary tree to search for fastly free space on allocation?
-    - needs parent reg + 2 children regs, 1 more than linked list
-    - could speed very much parsing of the free blocks
-    - can ease defragmentation process (if needed)
-
  ----------------------------------------------------------------------------------------------- */
 
 // -----------------------------------------------------------------------------------------------
@@ -115,9 +98,11 @@ Parse the free space to find a chunk. Check if current block can contain the req
 int pool_init(void * addr, int size);
 
 // -----------------------------------------------------------------------------------------------
-// Allocates in the arena a buffer of _size_ bytes. Memory blocked reserved in memory are always
-// boundary aligned with the hw architecture, so 4 bytes for 32 bits architecture, or 8 bytes
-// for 64 bits architecture. Use first-fit startegy for the moment (but could use best-fit).
+// Memory allocation. Allocates in the arena a buffer of _size_ bytes. Memory
+// blocked reserved in memory are always boundary aligned with the hw
+// architecture, so 4 bytes for 32 bits architecture, or 8 bytes for 64 bits
+// architecture. Use first-fit startegy for the moment (but could use
+// best-fit).
 //
 // Argument:
 //  - size: the number of bytes the block needs to own
@@ -125,6 +110,16 @@ int pool_init(void * addr, int size);
 //  - the address of the buffer's first byte, otherwise -1 if failed
 // -----------------------------------------------------------------------------------------------
 void * pool_malloc(int size);
+
+// -----------------------------------------------------------------------------------------------
+// Clear alloc. Same than pool_malloc() but erase with zero the zone allocated
+//
+// Argument:
+//  - size: the number of bytes the block needs to own
+// Returns:
+//  - the address of the buffer's first byte, otherwise -1 if failed
+// -----------------------------------------------------------------------------------------------
+void * pool_calloc(int size);
 
 // -----------------------------------------------------------------------------------------------
 // Releases a block and make it available again for future use.
@@ -147,4 +142,4 @@ int pool_free(void * addr);
 // -----------------------------------------------------------------------------------------------
 int pool_check_free_space(int used);
 
-#endif // MALLOC_INCLUDE
+#endif
