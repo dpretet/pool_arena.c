@@ -122,6 +122,17 @@ void * pool_malloc(int size);
 void * pool_calloc(int size);
 
 // -----------------------------------------------------------------------------------------------
+// Used to place existibng block in a wider space. If failed, the existing block remains OK
+//
+// Arguments:
+//  - addr: address of the chunk to move
+//  - size: size in byte of the chunk
+// Returns:
+//  - -1 if failed to allocate the new block
+// -----------------------------------------------------------------------------------------------
+void * pool_realloc(void * addr, int size);
+
+// -----------------------------------------------------------------------------------------------
 // Releases a block and make it available again for future use.
 //
 // Arguments:

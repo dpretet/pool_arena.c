@@ -9,7 +9,7 @@ obj = $(src:.c=.o)
 CFLAGS = -Wall -Wextra -pedantic -I ./src
 LDFLAGS =
 
-testsuite: $(obj)
+test/testsuite: $(obj)
 	$(CC) -o $@ $^ $(LDFLAGS)
 
 .PHONY: clean

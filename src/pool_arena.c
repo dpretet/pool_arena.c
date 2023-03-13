@@ -3,12 +3,13 @@
 
 #include <stdio.h>
 #include <string.h>
+#include "pool_arena.h"
 
 // -----------------------------------------------------------------------------------------------
 // Local declarations
 // -----------------------------------------------------------------------------------------------
 
-// The basic data structure describing a arena free space element
+// The basic data structure describing a free space arena element
 struct blk {
     // Size of the data payload
     int size;
@@ -23,10 +24,10 @@ typedef struct blk blk_t;
 // Size of a memory element, 32 or 64 bits
 const static int reg_size = sizeof(void *);
 const static int log2_reg_size = (reg_size == 4) ? 2 : 3;
-// Size of a block header
+// Size of a block header: size, previous & next block addresses
 const static int header_size = 3 * reg_size;
 
-// Current block of the arena
+// Current free space manipulated by the arena
 static blk_t * current;
 // temporary struct used when forking/merging blocks
 static blk_t * tmp_blk;
@@ -38,11 +39,19 @@ static int pool_size;
 static int pool_allocated;
 static int pool_free_space;
 
+/*
+ * Internal functions
+ */
+
+// Find free space when freeing
+static inline void * get_loc_to_free(void * addr);
+// Find free space when allocating
+static inline void * get_loc_to_place(void * addr, int place);
+
 
 // -----------------------------------------------------------------------------------------------
-// Called by the environment to setup the arena start address
-// To call once when the system boots up or when creating
-// a new pool arena.
+// Called by the environment to setup the arena start address To call once when
+// the system boots up or when creating a new pool arena.
 //
 // Arguments:
 //  - addr: address of the arena's first byte
@@ -74,7 +83,7 @@ int pool_init(void * addr, int size) {
     current->prv = NULL;
     current->nxt = NULL;
 
-    /* #ifdef POOL_ARENA_DEBUG */
+    #ifdef POOL_ARENA_DEBUG
     printf("Architecture/Library Setup:\n");
     printf("  - register size: %d bytes\n", reg_size);
     printf("  - header size: %d bytes\n", header_size);
@@ -88,7 +97,7 @@ int pool_init(void * addr, int size) {
     printf("  - prv: %p\n", (void *)current->prv);
     printf("  - nxt: %p\n", (void *)current->nxt);
     printf("\n");
-    /* #endif */
+    #endif
 
     return 0;
 }
@@ -106,6 +115,7 @@ static inline int round_up(int * x) {
     return ((*x + 7) >> log2_reg_size) << log2_reg_size;
 }
 
+
 // -----------------------------------------------------------------------------------------------
 // Allocates in the arena a buffer of _size_ bytes. Memory blocked reserved in memory are always
 // boundary aligned with the hw architecture, so 4 bytes for 32 bits architecture, or 8 bytes
@@ -118,17 +128,6 @@ static inline int round_up(int * x) {
 // -----------------------------------------------------------------------------------------------
 void * pool_malloc(int size) {
 
-    // Return -1 if failed to allocate a buffer
-    if (current->size <= (size + header_size)) {
-		#ifdef POOL_ARENA_DEBUG
-        printf("ERROR: Failed to allocate the chunk\n");
-		printf("  - current free space: %d\n", current->size);
-		#endif
-        return (void *)(-1);
-    }
-
-    // TODO: Parse the blocks if current is not usable
-
     int _size;
     void * ret;
     void * new_space;
@@ -136,13 +135,40 @@ void * pool_malloc(int size) {
     void * nxt_pt;
     int new_size;
 
+	if (size == 0) {
+		#ifdef POOL_ARENA_DEBUG
+        printf("ERROR: Can't allocate a zero byte block\n");
+		#endif
+        return NULL;
+	}
+
     // Round up the size up to the arch width. Ensure the size is at minimum a register size and
     // a multiple of that register. So if use 64 bits arch, a 4 bytes allocation is round up
-    // to 8 bytes, and 28 bytes is round up to 32 bytes, 46 to 48 bytes, 118 to 120 bytes.
+    // to 8 bytes, and 28 bytes is round up to 32 bytes, ...
     _size = round_up(&size);
+
+	// Return -1 if failed to allocate a buffer
+    if (pool_free_space <= (_size + header_size)) {
+		#ifdef POOL_ARENA_DEBUG
+        printf("ERROR: Failed to allocate the chunk\n");
+		printf("  - current free space: %d\n", current->size);
+		#endif
+        return NULL;
+    }
 
     // Update monitoring
     pool_allocated += _size + reg_size;
+
+	ret = get_loc_to_place(current, _size);
+
+	if (ret == NULL) {
+		#ifdef POOL_ARENA_DEBUG
+		printf("ERROR: Can't find a place to place a new block");
+		printf("  - requested free space: %d\n", size);
+		printf("  - current free space: %d\n", pool_free_space);
+		#endif
+		return NULL;
+	}
 
     // Payload's address the application can use
     ret = (char *)current + reg_size;
@@ -169,7 +195,7 @@ void * pool_malloc(int size) {
 		printf("ERROR: computed a negative free space size\n");
 		#endif
         current->size = 0;
-        return (void *)(-1);
+        return NULL;
 	} else {
         current->size = new_size;
 	}
@@ -197,6 +223,82 @@ void * pool_malloc(int size) {
 }
 
 
+// memory allocation + clear
+void * pool_calloc(int size) {
+
+	void * ptr = pool_malloc(size);
+
+	if (ptr == NULL) {
+		#ifdef POOL_ARENA_DEBUG
+		printf("ERROR: Failed to allocate the chunk\n");
+		printf("  - current free space: %d\n", current->size);
+		#endif
+		return NULL;
+	}
+
+	memset(ptr, 0, size);
+
+	return ptr;
+}
+
+// Move a block to a new place
+void * pool_realloc(void * addr, int size) {
+
+	void * ptr = pool_malloc(size);
+
+	if (ptr == NULL) {
+		#ifdef POOL_ARENA_DEBUG
+		printf("ERROR: Failed to allocate the chunk\n");
+		printf("  - requested free space: %d\n", size);
+		printf("  - current free space: %d\n", pool_free_space);
+		#endif
+		return NULL;
+	}
+
+	memcpy(ptr, addr, size);
+	pool_free(addr);
+
+	return ptr;
+}
+
+// Search for a free space to place a new block
+static inline void * get_loc_to_place(void * current, int size) {
+
+	blk_t * parse = current;
+	blk_t * org = current;
+
+	// Current block is wide enough
+	if (org->size >= (size + header_size))
+		return current;
+
+	// If not, parse the prv blocks to find a place
+	parse = current;
+	parse = parse->prv;
+	while (parse != NULL) {
+		if (parse->size >= (size + header_size))
+			return (void *)parse;
+		parse = parse->prv;
+	}
+
+	// If not, parse the nxt blocks to find a place
+	parse = current;
+	parse = parse->nxt;
+	while (parse != NULL) {
+		if (parse->size >= (size + header_size))
+			return (void *)parse;
+		parse = parse->nxt;
+	}
+
+	// No space found, give up and stop the allocation
+	#ifdef POOL_ARENA_DEBUG
+	printf("ERROR: Failed to allocate the chunk\n");
+	printf("  - current free space: %d\n", current->size);
+	#endif
+
+	return NULL;
+}
+
+
 // -----------------------------------------------------------------------------------------------
 // Parses the free blocks to find the place to set the one under release
 // Useful to update the linked list correctly and fast its parsing.
@@ -216,10 +318,10 @@ void * pool_malloc(int size) {
 // │Block 0│      ~~~~~~~~ Free ~~~~~~~~~       │Block 1│
 // └───────┴────────────────────────────────────┴───────┘
 // ┌───────┬───────┬────────────────────┬───────┬────────┬───────┬───────┐
-// │Block 0│Block 1│   ~~~ Freee ~~~    │Block 2│~ Free ~│Block 3│Block 4│
+// │Block 0│Block 1│   ~~~ Free ~~~     │Block 2│~ Free ~│Block 3│Block 4│
 // └───────┴───────┴────────────────────┴───────┴────────┴───────┴───────┘
 // ┌────────┬───────┬───────┬────────────────────┬───────┬────────┐
-// │~ Free ~│Block 0│Block 1│   ~~~ Freee ~~~    │Block 2│~ Free ~│
+// │~ Free ~│Block 0│Block 1│   ~~~ Free ~~~     │Block 2│~ Free ~│
 // └────────┴───────┴───────┴────────────────────┴───────┴────────┘
 //
 // Argument:
@@ -375,27 +477,36 @@ int pool_free(void * addr) {
     return 0;
 }
 
+
 int pool_check_free_space(int used) {
 
 	// Size in bytes available in the pool
 	int size = 0;
+	#ifdef POOL_ARENA_DEBUG
 	// Number of free blocks available
 	int nb_fb = 0;
+	#endif
 
 	tmp_pt = current;
 	tmp_blk = tmp_pt;
 
+	#ifdef POOL_ARENA_DEBUG
 	printf("Parse prv(s)\n");
+	#endif
 	while (1) {
 
+		#ifdef POOL_ARENA_DEBUG
 		printf("Free bloc Info:\n");
 		printf("	- addr: %p\n", tmp_pt);
 		printf("	- free space: %d\n", tmp_blk->size);
 		printf("	- prv: %p\n", (void *)tmp_blk->prv);
 		printf("	- nxt: %p\n", (void *)tmp_blk->nxt);
+		#endif
 
 		size += tmp_blk->size;
+		#ifdef POOL_ARENA_DEBUG
 		nb_fb += 1;
+		#endif
 		if (tmp_blk->prv != NULL) {
 			tmp_blk = tmp_blk->prv;
 		} else {
@@ -409,19 +520,27 @@ int pool_check_free_space(int used) {
 	tmp_blk = tmp_pt;
 
 	size -= tmp_blk->size;
+	#ifdef POOL_ARENA_DEBUG
 	nb_fb -= 1;
+	#endif
 
+	#ifdef POOL_ARENA_DEBUG
 	printf("Parse nxt(s)\n");
+	#endif
 	while (1) {
 
+		#ifdef POOL_ARENA_DEBUG
 		printf("Free bloc Info:\n");
 		printf("	- addr: %p\n", tmp_pt);
 		printf("	- free space: %d\n", tmp_blk->size);
 		printf("	- prv: %p\n", (void *)tmp_blk->prv);
 		printf("	- nxt: %p\n", (void *)tmp_blk->nxt);
+		#endif
 
 		size += tmp_blk->size;
+		#ifdef POOL_ARENA_DEBUG
 		nb_fb += 1;
+		#endif
 
 		if (tmp_blk->nxt != NULL) {
 			tmp_blk = tmp_blk->nxt;
@@ -433,28 +552,14 @@ int pool_check_free_space(int used) {
 	size += used;
 
 	if (size != pool_size) {
-		/* #ifdef POOL_ARENA_DEBUG */
+		#ifdef POOL_ARENA_DEBUG
 		printf("ERROR: Free space check failed:\n");
 		printf("	- Nb of block: %d\n", nb_fb);
 		printf("	- Total free space: %d\n", size);
 		printf("	- Expected free space: %d\n", pool_size);
-		/* #endif */
+		#endif
 		return 1;
 	}
 
 	return 0;
-}
-
-
-// memory allocation + clear
-void * pool_calloc(int size) {
-	void * ptr = NULL;
-	ptr = pool_malloc(size);
-
-	if (ptr == NULL)
-		return NULL;
-
-	memset(ptr, 0, size);
-
-	return ptr;
 }
