@@ -34,7 +34,7 @@ static blk_t * tmp_blk;
 // Used to store the original block address before parsing the free space blocks
 static void * tmp_pt;
 
-// Used to track arena status during usage and check if no leaks occcur
+// Used to track arena status during usage and check if no leaks occur
 static int pool_size;
 static int pool_allocated;
 static int pool_free_space;
@@ -137,15 +137,21 @@ void * pool_malloc(int size) {
 
 	if (size == 0) {
 		#ifdef POOL_ARENA_DEBUG
-        printf("ERROR: Can't allocate a zero byte block\n");
+        printf("ERROR: Can't allocate a zero-byte block\n");
 		#endif
         return NULL;
 	}
 
+	// A block must be at least 3 registers wide to be able to release
+	// it in free(). A free block must be composed by some size, prv
+	// and nxt fields at minimum
+	if (size<reg_size*3)
+		_size = reg_size*3;
     // Round up the size up to the arch width. Ensure the size is at minimum a register size and
     // a multiple of that register. So if use 64 bits arch, a 4 bytes allocation is round up
     // to 8 bytes, and 28 bytes is round up to 32 bytes, ...
-    _size = round_up(&size);
+	else
+		_size = round_up(&size);
 
 	// Return -1 if failed to allocate a buffer
     if (pool_free_space <= (_size + header_size)) {
@@ -155,9 +161,6 @@ void * pool_malloc(int size) {
 		#endif
         return NULL;
     }
-
-    // Update monitoring
-    pool_allocated += _size + reg_size;
 
 	ret = get_loc_to_place(current, _size);
 
@@ -169,6 +172,9 @@ void * pool_malloc(int size) {
 		#endif
 		return NULL;
 	}
+
+    // Update monitoring
+    pool_allocated += _size + reg_size;
 
     // Payload's address the application can use
     ret = (char *)current + reg_size;
@@ -334,11 +340,13 @@ static inline void * get_loc_to_place(void * current, int size) {
 static inline void * get_loc_to_free(void * addr) {
 
 	// In case the free block is monolithic, just return its address
-	if (current->prv == NULL && current->nxt == NULL)
-		return (void *)(&current);
+	if (current->prv == NULL && current->nxt == NULL) {
+		printf("no prv or nxt pointer\n");
+		return (void *)(current);
+	}
 
     // The current block of free space manipulated by the library
-    tmp_pt = (blk_t *)(&current);
+    tmp_pt = (blk_t *)(current);
     tmp_blk = tmp_pt;
 
 	// Location found to place the bloc under release
@@ -392,9 +400,13 @@ static inline void * get_loc_to_free(void * addr) {
 // -----------------------------------------------------------------------------------------------
 int pool_free(void * addr) {
 
+	printf("addr: %p\n", addr);
+	printf("current: %p\n", (void *)current);
     // Get block info
     void * blk_pt = (char *)addr - reg_size;
     blk_t * blk = blk_pt;
+	blk->prv = NULL;
+	blk->nxt  = NULL;
     // Update pool arena statistics
     pool_free_space += blk->size;
 
@@ -403,11 +415,16 @@ int pool_free(void * addr) {
 
 	// Free space zone to connect or merge with the block to release. Multiple
 	// free blocks are suitable to connect, ensuring we'll parse fastly the linked list
+	// This will also avoid fragmentation
     void * free_pt = get_loc_to_free(blk_pt);
     blk_t * free_blk = (blk_t *)free_pt;
 
+	printf("blk_pt: %p\n", (void *)blk_pt);
+	printf("free_pt: %p\n", (void *)free_pt);
+
 	// 1. Check the block can be merged with the current free space selected
 	if (blk_pt<free_pt) {
+		printf("Smaller\n");
 		// If block space matches free space start address, merge
 		region = (char *)blk_pt + blk->size + reg_size;
 		if (region == free_pt) {
@@ -427,6 +444,7 @@ int pool_free(void * addr) {
 			}
 		}
 	} else {
+		printf("Bigger\n");
 		// if free space range macthes the block start address, merge
 		// in this case, the free space becomes the block to release
 		region = (char *)free_pt + free_blk->size + header_size;
@@ -438,6 +456,8 @@ int pool_free(void * addr) {
 		}
 	}
 
+	printf("Update nxt\n");
+	printf("%p\n", (void *)blk->nxt);
     // 2. Try to merge with next block if exists
     if (blk->nxt != NULL) {
         // if next block is contiguous the one to free, merge them
@@ -454,6 +474,8 @@ int pool_free(void * addr) {
         }
     }
 
+	printf("Update prv\n");
+	printf("%p\n", (void *)blk->prv);
     // 3. Try to merge with previous block if exists
     if (blk->prv != NULL) {
         // if previous block is contiguous the one to free, merge them
@@ -478,35 +500,35 @@ int pool_free(void * addr) {
 }
 
 
-int pool_check_free_space(int used) {
+int pool_check(int used) {
 
 	// Size in bytes available in the pool
 	int size = 0;
-	#ifdef POOL_ARENA_DEBUG
+	/* #ifdef POOL_ARENA_DEBUG */
 	// Number of free blocks available
 	int nb_fb = 0;
-	#endif
+	/* #endif */
 
 	tmp_pt = current;
 	tmp_blk = tmp_pt;
 
-	#ifdef POOL_ARENA_DEBUG
+	/* #ifdef POOL_ARENA_DEBUG */
 	printf("Parse prv(s)\n");
-	#endif
+	/* #endif */
 	while (1) {
 
-		#ifdef POOL_ARENA_DEBUG
+		/* #ifdef POOL_ARENA_DEBUG */
 		printf("Free bloc Info:\n");
 		printf("	- addr: %p\n", tmp_pt);
 		printf("	- free space: %d\n", tmp_blk->size);
 		printf("	- prv: %p\n", (void *)tmp_blk->prv);
 		printf("	- nxt: %p\n", (void *)tmp_blk->nxt);
-		#endif
+		/* #endif */
 
 		size += tmp_blk->size;
-		#ifdef POOL_ARENA_DEBUG
+		/* #ifdef POOL_ARENA_DEBUG */
 		nb_fb += 1;
-		#endif
+		/* #endif */
 		if (tmp_blk->prv != NULL) {
 			tmp_blk = tmp_blk->prv;
 		} else {
@@ -520,27 +542,27 @@ int pool_check_free_space(int used) {
 	tmp_blk = tmp_pt;
 
 	size -= tmp_blk->size;
-	#ifdef POOL_ARENA_DEBUG
+	/* #ifdef POOL_ARENA_DEBUG */
 	nb_fb -= 1;
-	#endif
+	/* #endif */
 
-	#ifdef POOL_ARENA_DEBUG
+	/* #ifdef POOL_ARENA_DEBUG */
 	printf("Parse nxt(s)\n");
-	#endif
+	/* #endif */
 	while (1) {
 
-		#ifdef POOL_ARENA_DEBUG
+		/* #ifdef POOL_ARENA_DEBUG */
 		printf("Free bloc Info:\n");
 		printf("	- addr: %p\n", tmp_pt);
 		printf("	- free space: %d\n", tmp_blk->size);
 		printf("	- prv: %p\n", (void *)tmp_blk->prv);
 		printf("	- nxt: %p\n", (void *)tmp_blk->nxt);
-		#endif
+		/* #endif */
 
 		size += tmp_blk->size;
-		#ifdef POOL_ARENA_DEBUG
+		/* #ifdef POOL_ARENA_DEBUG */
 		nb_fb += 1;
-		#endif
+		/* #endif */
 
 		if (tmp_blk->nxt != NULL) {
 			tmp_blk = tmp_blk->nxt;
@@ -552,12 +574,12 @@ int pool_check_free_space(int used) {
 	size += used;
 
 	if (size != pool_size) {
-		#ifdef POOL_ARENA_DEBUG
+		/* #ifdef POOL_ARENA_DEBUG */
 		printf("ERROR: Free space check failed:\n");
 		printf("	- Nb of block: %d\n", nb_fb);
 		printf("	- Total free space: %d\n", size);
 		printf("	- Expected free space: %d\n", pool_size);
-		#endif
+		/* #endif */
 		return 1;
 	}
 
