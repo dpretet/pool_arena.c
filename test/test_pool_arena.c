@@ -3,6 +3,7 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include "unity.h"
 
 #include "pool_arena.h"
@@ -21,7 +22,7 @@ int blks_sts[NB_PT];
 
 void setUp(void) {
     // Pool arena size to manage
-    int size = ARENA_SIZE * reg_size;
+    int size = ARENA_SIZE;
     // Get first a space in system memory
     arena = malloc(size);
     // Initialize the blocks' pointer
@@ -34,6 +35,7 @@ void setUp(void) {
 
 void tearDown(void) {
     // Release the pool arena
+	memset(arena, 0, ARENA_SIZE);
     free(arena);
 }
 
@@ -234,18 +236,6 @@ void test_realloc_ko(void) {
 }
 
 
-void test_check(void) {
-
-	/* int ret; */
-    /* TEST_ASSERT_EQUAL_INT(0, pool_init(arena, ARENA_SIZE)); */
-	/* blks_pt[0] = pool_malloc(32); */
-	/* blks_pt[1] = pool_malloc(256); */
-	/* TEST_ASSERT_NOT_NULL(blks_pt[0]); */
-	/* TEST_ASSERT_NOT_NULL(blks_pt[1]); */
-    /* TEST_ASSERT_EQUAL_INT(0, pool_check(0)); */
-	/* ret = pool_free(blks_pt[0]); */
-    /* TEST_ASSERT_EQUAL_INT(0, pool_check(32+256)); */
-}
 
 // Allocate blocks in the pool arena, fill them and checks the data
 // integrity while 
@@ -268,6 +258,7 @@ void test_data_integrity(void) {
 	check_blks(chunk_size);
 	// Display all chunks allocated across the arena
 	print_blks();
+    TEST_ASSERT_EQUAL_INT(0, pool_check());
 
 	// Try to free some chunks to be sure it doesn't corrupt the arena
 	free_blks(1);
@@ -278,6 +269,7 @@ void test_data_integrity(void) {
 	check_blks(chunk_size);
 	free_blks(0);
 	check_blks(chunk_size);
+    TEST_ASSERT_EQUAL_INT(0, pool_check());
 
 	// Restart again the allocation of freed blocks
 	alloc_blks(chunk_size);
@@ -287,12 +279,14 @@ void test_data_integrity(void) {
 	// Free all blocks
 	for (int i=0; i<ARENA_SIZE/chunk_size && i<NB_PT; i++)
 		free_blks(i);
+    TEST_ASSERT_EQUAL_INT(0, pool_check());
 		
 	// Round 2: chunk size 512 bytes
 	chunk_size = 512;
 	alloc_blks(chunk_size);
 	fill_blks(chunk_size);
 	check_blks(chunk_size);
+    TEST_ASSERT_EQUAL_INT(0, pool_check());
 
 	free_blks(0);
 	check_blks(chunk_size);
@@ -302,10 +296,13 @@ void test_data_integrity(void) {
 	check_blks(chunk_size);
 	free_blks(1);
 	check_blks(chunk_size);
+	pool_log();
+    TEST_ASSERT_EQUAL_INT(0, pool_check());
 
 	// Free all blocks
 	for (int i=0; i<ARENA_SIZE/chunk_size && i<NB_PT; i++)
 		free_blks(i);
+    TEST_ASSERT_EQUAL_INT(0, pool_check());
 		
 	// Last round trip, blocks smaller than the minimum number of registers
 	// to free a block
@@ -313,10 +310,42 @@ void test_data_integrity(void) {
 	alloc_blks(chunk_size);
 	fill_blks(chunk_size);
 	check_blks(chunk_size);
+    TEST_ASSERT_EQUAL_INT(0, pool_check());
 
 	// Free all blocks
-	for (int i=0; i<ARENA_SIZE/chunk_size && i<NB_PT; i++)
+	for (int i=0; i<NB_PT; i++)
 		free_blks(i);
+    TEST_ASSERT_EQUAL_INT(0, pool_check());
+}
+
+
+void test_check(void) {
+
+	int ret;
+
+    TEST_ASSERT_EQUAL_INT(0, pool_init(arena, ARENA_SIZE));
+	pool_log();
+
+	blks_pt[0] = pool_malloc(32);
+	TEST_ASSERT_NOT_NULL(blks_pt[0]);
+    TEST_ASSERT_EQUAL_INT(32, pool_get_size(blks_pt[0]));
+	pool_log();
+    TEST_ASSERT_EQUAL_INT(0, pool_check());
+
+	blks_pt[1] = pool_malloc(256);
+	TEST_ASSERT_NOT_NULL(blks_pt[1]);
+    TEST_ASSERT_EQUAL_INT(0, pool_check());
+	pool_log();
+
+	ret = pool_free(blks_pt[0]);
+    TEST_ASSERT_EQUAL_INT(0, ret);
+    TEST_ASSERT_EQUAL_INT(0, pool_check());
+	pool_log();
+
+	ret = pool_free(blks_pt[1]);
+    TEST_ASSERT_EQUAL_INT(0, ret);
+    TEST_ASSERT_EQUAL_INT(0, pool_check());
+	pool_log();
 }
 
 
@@ -335,7 +364,7 @@ int main(void) {
     RUN_TEST(test_realloc_ok);
     RUN_TEST(test_realloc_ko);
     RUN_TEST(test_data_integrity);
-    /* RUN_TEST(test_check); */
+    RUN_TEST(test_check);
 
     return UNITY_END();
 }

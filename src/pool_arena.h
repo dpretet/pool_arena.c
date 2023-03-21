@@ -151,6 +151,27 @@ int pool_free(void * addr);
 // Returns:
 // 	- 1 if space range is not equal to initial setup, 0 otherwise
 // -----------------------------------------------------------------------------------------------
-int pool_check(int used);
+int pool_check(void);
+
+// -----------------------------------------------------------------------------------------------
+// Print the linked list composing the free space blocks
+//
+// Arguments:
+//	- None
+// Returns:
+// 	- nothing
+// -----------------------------------------------------------------------------------------------
+void pool_log(void);
+
+
+// -----------------------------------------------------------------------------------------------
+// Returns the size of a chunk in the pool previously allocated
+//
+// Arguments:
+//	- addr: the chunk's address returned by a previous pool_malloc()
+// Returns:
+// 	- the size of the chunk
+// -----------------------------------------------------------------------------------------------
+int pool_get_size(void * addr);
 
 #endif

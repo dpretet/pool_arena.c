@@ -6,11 +6,13 @@
 src = $(wildcard src/*.c test/*.c)
 obj = $(src:.c=.o)
 
-CFLAGS = -Wall -Wextra -pedantic -I ./src
-LDFLAGS =
+CFLAGS = -Wall -Wextra -pedantic -I ./src -DPOOL_ARENA_DEBUG=1
 
 test/testsuite: $(obj)
-	$(CC) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CFLAGS) $(obj) -o $@
+
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
 
 .PHONY: clean
 clean:

@@ -1,0 +1,8 @@
+name: PoolArena
+on: [push]
+jobs:
+  UnitTests:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: make && ./test/testsuite
