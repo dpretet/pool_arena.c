@@ -12,7 +12,7 @@
 // The basic data structure describing a free space arena element
 struct blk {
     // Size of the data payload
-    int size;
+    unsigned int size;
     // Pointer to the previous block. 0 means not assigned
     struct blk * prv;
     // Pointer to the next block. 0 means not assigned
@@ -22,10 +22,10 @@ struct blk {
 typedef struct blk blk_t;
 
 // Size of a memory element, 32 or 64 bits
-const static int reg_size = sizeof(void *);
-const static int log2_reg_size = (reg_size == 4) ? 2 : 3;
+const static unsigned int reg_size = sizeof(void *);
+const static unsigned int log2_reg_size = (reg_size == 4) ? 2 : 3;
 // Size of a block header: size, previous & next block addresses
-const static int header_size = 3 * reg_size;
+const static unsigned int header_size = 3 * reg_size;
 
 // Current free space manipulated by the arena
 static blk_t * current;
@@ -36,11 +36,11 @@ static void * tmp_pt;
 static void * pool_addr;
 
 // Used to track arena status during usage and check if no leaks occur
-static int pool_size;
+static unsigned int pool_size;
 static int nb_alloc_blk;
 static int nb_free_blk;
-static int alloc_space;
-static int free_space;
+static unsigned int alloc_space;
+static unsigned int free_space;
 
 /*
  * Internal functions
@@ -49,7 +49,7 @@ static int free_space;
 // Find free space when freeing
 static inline void * get_loc_to_free(void * addr);
 // Find free space when allocating
-static inline void * get_loc_to_place(void * addr, int place);
+static inline void * get_loc_to_place(void * addr, unsigned int place);
 
 
 // -----------------------------------------------------------------------------------------------
@@ -62,7 +62,7 @@ static inline void * get_loc_to_place(void * addr, int place);
 // Returns:
 //  - -1 if size is too small to contain at least 1 byte, otherwise 0
 // -----------------------------------------------------------------------------------------------
-int pool_init(void * addr, int size) {
+int pool_init(void * addr, unsigned int size) {
 
 	#ifdef POOL_ARENA_DEBUG
 	printf("------------------------------------------------------------------------\n");
@@ -126,7 +126,7 @@ int pool_init(void * addr, int size) {
 // Returns:
 //  - the number of bytes rounds up to the architcture width
 // -----------------------------------------------------------------------------------------------
-static inline int round_up(int * x) {
+static inline int round_up(unsigned int * x) {
     return ((*x + 7) >> log2_reg_size) << log2_reg_size;
 }
 
@@ -141,7 +141,7 @@ static inline int round_up(int * x) {
 // Returns:
 //  - the address of the buffer's first byte, otherwise -1 if failed
 // -----------------------------------------------------------------------------------------------
-void * pool_malloc(int size) {
+void * pool_malloc(unsigned int size) {
 
 	#ifdef POOL_ARENA_DEBUG
 	printf("------------------------------------------------------------------------\n");
@@ -153,8 +153,8 @@ void * pool_malloc(int size) {
     void * free_loc;
     void * prv_pt;
     void * nxt_pt;
-    int _size;
-    int new_size;
+    unsigned int _size;
+    unsigned int new_size;
 
 	if (size == 0) {
 		#ifdef POOL_ARENA_DEBUG
@@ -250,7 +250,7 @@ void * pool_malloc(int size) {
 
 
 // memory allocation + clear
-void * pool_calloc(int size) {
+void * pool_calloc(unsigned int size) {
 
 	#ifdef POOL_ARENA_DEBUG
 	printf("------------------------------------------------------------------------\n");
@@ -273,7 +273,7 @@ void * pool_calloc(int size) {
 }
 
 // Move a block to a new place
-void * pool_realloc(void * addr, int size) {
+void * pool_realloc(void * addr, unsigned int size) {
 
 	#ifdef POOL_ARENA_DEBUG
 	printf("------------------------------------------------------------------------\n");
@@ -299,7 +299,7 @@ void * pool_realloc(void * addr, int size) {
 }
 
 // Search for a free space to place a new block
-static inline void * get_loc_to_place(void * current, int size) {
+static inline void * get_loc_to_place(void * current, unsigned int size) {
 
 	blk_t * parse = current;
 	blk_t * org = current;
@@ -559,8 +559,8 @@ int pool_free(void * addr) {
 
 int pool_check(void) {
 
-	int alloc = nb_alloc_blk * reg_size + alloc_space;
-	int free = nb_free_blk * reg_size + free_space;
+	unsigned int alloc = nb_alloc_blk * reg_size + alloc_space;
+	unsigned int free = nb_free_blk * reg_size + free_space;
 	blk_t * tmp = current;
 	int cnt = 0;
 
@@ -641,7 +641,7 @@ void pool_log(void) {
 }
 
 // Return the size of chunk located @ address
-int pool_get_size(void * addr) {
+unsigned int pool_get_size(void * addr) {
     void * blk_pt = (char *)addr - reg_size;
     blk_t * blk = blk_pt;
 	return blk->size;

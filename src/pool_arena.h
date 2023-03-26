@@ -95,7 +95,7 @@ Parse the free space to find a chunk. Check if current block can contain the req
 // Returns:
 //  - -1 if size is too small to contain at least 1 byte, otherwise 0
 // -----------------------------------------------------------------------------------------------
-int pool_init(void * addr, int size);
+int pool_init(void * addr, unsigned int size);
 
 // -----------------------------------------------------------------------------------------------
 // Memory allocation. Allocates in the arena a buffer of _size_ bytes. Memory
@@ -109,7 +109,7 @@ int pool_init(void * addr, int size);
 // Returns:
 //  - the address of the buffer's first byte, otherwise -1 if failed
 // -----------------------------------------------------------------------------------------------
-void * pool_malloc(int size);
+void * pool_malloc(unsigned int size);
 
 // -----------------------------------------------------------------------------------------------
 // Clear alloc. Same than pool_malloc() but erase with zero the zone allocated
@@ -119,7 +119,7 @@ void * pool_malloc(int size);
 // Returns:
 //  - the address of the buffer's first byte, otherwise -1 if failed
 // -----------------------------------------------------------------------------------------------
-void * pool_calloc(int size);
+void * pool_calloc(unsigned int size);
 
 // -----------------------------------------------------------------------------------------------
 // Used to place existibng block in a wider space. If failed, the existing block remains OK
@@ -130,7 +130,7 @@ void * pool_calloc(int size);
 // Returns:
 //  - -1 if failed to allocate the new block
 // -----------------------------------------------------------------------------------------------
-void * pool_realloc(void * addr, int size);
+void * pool_realloc(void * addr, unsigned int size);
 
 // -----------------------------------------------------------------------------------------------
 // Releases a block and make it available again for future use.
@@ -172,6 +172,6 @@ void pool_log(void);
 // Returns:
 // 	- the size of the chunk
 // -----------------------------------------------------------------------------------------------
-int pool_get_size(void * addr);
+unsigned int pool_get_size(void * addr);
 
 #endif

@@ -12,7 +12,7 @@
 #define ARENA_SIZE 16384
 
 
-int reg_size = sizeof(void *);
+unsigned int reg_size = sizeof(void *);
 void * arena;
 
 void * blks_pt[NB_PT];
@@ -44,7 +44,7 @@ void tearDown(void) {
  * Set of functions to stress out the data integrity while allocating
  * again and again in the pool arena
  */
-void alloc_blk(int i, int size) {
+void alloc_blk(int i, unsigned int size) {
 	if (blks_sts[i] == 0) {
 		blks_pt[i] = pool_malloc(size);
 		if (blks_pt[i] != NULL)
@@ -54,25 +54,25 @@ void alloc_blk(int i, int size) {
 	}
 }
 
-void alloc_blks(int size) {
+void alloc_blks(unsigned int size) {
 	
 	for (int i=0;i<NB_PT;i++) {
 		alloc_blk(i, size);
 	}
 }
 
-void fill_blk(int i, int size) {
+void fill_blk(int i, unsigned int size) {
 
 	char * array;
 
 	if (blks_sts[i]) {
 		array = blks_pt[i];
-		for (int j=0;j<size;j++)
+		for (unsigned int j=0;j<size;j++)
 			array[j] = i;
 	}
 }
 
-void fill_blks(int size) {
+void fill_blks(unsigned int size) {
 	for (int i=0;i<NB_PT;i++) {
 		fill_blk(i, size);
 	}
@@ -92,16 +92,16 @@ void free_blks() {
 	}
 }
 
-void check_blks(int size) {
+void check_blks(unsigned int size) {
 
 	char * array;
 
 	for (int i=0;i<NB_PT;i++) {
 		if (blks_sts[i]) {
 			array = blks_pt[i];
-			printf("p:%p\n", (void*)array);
-			for (int j=0;j<size;j++) {
-				printf("i:%0x d:%0x\t", i, array[i]);
+			/* printf("p:%p\n", (void*)array); */
+			for (unsigned int j=0;j<size;j++) {
+				/* printf("i:%0x d:%0x\t", i, array[i]); */
     			TEST_ASSERT_EQUAL_INT(1, array[j] == i);
 			}
 			printf("\n");
@@ -184,7 +184,7 @@ void test_giga_chunk_ko(void) {
 void test_alloc_n_free(void) {
 
     int ret;
-	int chunk_depth = reg_size*10;
+	unsigned int chunk_depth = reg_size*10;
 
     TEST_ASSERT_EQUAL_INT(0, pool_init(arena, ARENA_SIZE));
 
@@ -199,8 +199,8 @@ void test_alloc_n_free(void) {
 void test_calloc(void) {
 
     int ret;
-	int chunk_size = 10;
-	int chunk_depth = reg_size*chunk_size;
+	unsigned int chunk_size = 10;
+	unsigned int chunk_depth = reg_size*chunk_size;
 
     TEST_ASSERT_EQUAL_INT(0, pool_init(arena, ARENA_SIZE));
 
@@ -210,7 +210,7 @@ void test_calloc(void) {
 
 	// test data has been erased first
 	int  *cmp = blks_pt[0];
-	for (int i=0;i<chunk_size/reg_size; i++) {
+	for (unsigned int i=0;i<chunk_size/reg_size; i++) {
 		TEST_ASSERT_TRUE(*cmp==0);
 		cmp++;
 	}
@@ -225,8 +225,8 @@ void test_calloc(void) {
 void test_realloc_ok(void) {
 
     int ret;
-	int chunk_size = 10;
-	int chunk_depth = reg_size*chunk_size;
+	unsigned int chunk_size = 10;
+	unsigned int chunk_depth = reg_size*chunk_size;
 
     TEST_ASSERT_EQUAL_INT(0, pool_init(arena, ARENA_SIZE));
 	// alloc first
@@ -247,8 +247,8 @@ void test_realloc_ok(void) {
 void test_realloc_ko(void) {
 
     int ret;
-	int chunk_size = 10;
-	int chunk_depth = reg_size*chunk_size;
+	unsigned int chunk_size = 10;
+	unsigned int chunk_depth = reg_size*chunk_size;
 
     TEST_ASSERT_EQUAL_INT(0, pool_init(arena, ARENA_SIZE));
 
@@ -270,7 +270,7 @@ void test_realloc_ko(void) {
 // integrity while freeing some blocks
 void test_data_integrity(void) {
 
-	int chunk_size;
+	unsigned int chunk_size;
 	printf("arena: %p\n", arena);
     TEST_ASSERT_EQUAL_INT(0, pool_init(arena, ARENA_SIZE));
 
