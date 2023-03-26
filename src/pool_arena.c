@@ -193,11 +193,11 @@ void * pool_malloc(unsigned int size) {
 		return NULL;
 	}
 
-	/* #ifdef POOL_ARENA_DEBUG */
+	#ifdef POOL_ARENA_DEBUG
 	printf("  - allocated addr: %p\n", loc);
 	printf("  - size requested: %d\n", _size);
 	printf("  - current free block: %p\n", (void *)current);
-	/* #endif */
+	#endif
 
     // Update monitoring
 	// ----------------
@@ -223,8 +223,10 @@ void * pool_malloc(unsigned int size) {
     tmp_blk->prv = prv_pt;
     tmp_blk->nxt = nxt_pt;
 
+	#ifdef POOL_ARENA_DEBUG
     printf("  - new free space address: %p\n", free_loc);
 	printf("  - new free space size: %d\n", tmp_blk->size);
+	#endif
 
     // Update previous block to link current
     if (prv_pt) {
@@ -462,9 +464,9 @@ int pool_free(void * addr) {
 	blk->nxt  = NULL;
 
     // Update pool arena statistics
-	/* #ifdef POOL_ARENA_DEBUG */
+	#ifdef POOL_ARENA_DEBUG
 	printf("  - size to free: %d\n", blk->size);
-	/* #endif */
+	#endif
 	nb_alloc_blk -= 1;
 	alloc_space -= blk->size;
 	nb_free_blk += 1;
@@ -585,6 +587,7 @@ int pool_check(void) {
 		cnt += 1;
 	}
 
+	#ifdef POOL_ARENA_DEBUG
 	printf("\n");
 	printf("------------------------------------------------------------------------\n");
 	printf("Pool Check\n");
@@ -604,16 +607,21 @@ int pool_check(void) {
 	printf("\n");
 	printf("Arena vs Computed: %d\n", pool_size - alloc - free);
 	printf("------------------------------------------------------------------------\n");
+	#endif
 
 	if (pool_size != (alloc + free)) {
+		#ifdef POOL_ARENA_DEBUG
 		printf("ERROR: Free space size doesn't match\n");
 		printf("------------------------------------------------------------------------\n");
+		#endif
 		return 1;
 	}
 
 	if (cnt != nb_free_blk) {
+		#ifdef POOL_ARENA_DEBUG
 		printf("ERROR: Free space block count doesn't match\n");
 		printf("------------------------------------------------------------------------\n");
+		#endif
 		return 1;
 	}
 

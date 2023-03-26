@@ -400,7 +400,7 @@ void test_free_space_recovering(void) {
 
     TEST_ASSERT_EQUAL_INT(0, pool_init(arena, ARENA_SIZE));
 
-	while (chunk_size < 2048) {
+	while (chunk_size < ARENA_SIZE) {
 
 		alloc_blks(chunk_size);
 		fill_blks(chunk_size);
