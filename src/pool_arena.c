@@ -127,7 +127,13 @@ int pool_init(void * addr, unsigned int size) {
 //  - the number of bytes rounds up to the architcture width
 // -----------------------------------------------------------------------------------------------
 static inline int round_up(unsigned int * x) {
-    return ((*x + 7) >> log2_reg_size) << log2_reg_size;
+
+	if (reg_size == 4)
+		return (0 == (*x & 0x3)) ? *x : ((*x + 4) & ~3u);
+	else
+		return (0 == (*x & 0x7)) ? *x : ((*x + 8) & ~7u);
+
+    /* return ((*x + 7) >> log2_reg_size) << log2_reg_size; */
 }
 
 
@@ -199,7 +205,7 @@ void * pool_malloc(unsigned int size) {
 	if (size<(2*reg_size))
 		alloc_space += 2*reg_size;
 	else
-		alloc_space += size;
+		alloc_space += round_up(&size);
 	free_space -= _size;
 
 	// Update free block
@@ -244,7 +250,7 @@ void * pool_malloc(unsigned int size) {
 	if (size<(2*reg_size))
 		tmp_blk->size = reg_size*2;
 	else
-		tmp_blk->size = size;
+		tmp_blk->size = round_up(&size);
     // Payload's address the application can use
     loc = (char *)loc + reg_size;
     #ifdef POOL_ARENA_DEBUG
@@ -311,14 +317,14 @@ static inline void * get_loc_to_place(void * current, unsigned int size) {
 	blk_t * org = current;
 
 	// Current block is wide enough
-	if (org->size >= size)
+	if (org->size >= size && parse->size-size > header_size)
 		return current;
 
 	// If not, parse the prv blocks to find a place
 	parse = current;
 	parse = parse->prv;
 	while (parse != NULL) {
-		if (parse->size >= size)
+		if (parse->size >= size && parse->size-size > header_size)
 			return (void *)parse;
 		parse = parse->prv;
 	}
@@ -327,7 +333,7 @@ static inline void * get_loc_to_place(void * current, unsigned int size) {
 	parse = current;
 	parse = parse->nxt;
 	while (parse != NULL) {
-		if (parse->size >= size)
+		if (parse->size >= size && parse->size-size > header_size)
 			return (void *)parse;
 		parse = parse->nxt;
 	}
@@ -601,11 +607,13 @@ int pool_check(void) {
 
 	if (pool_size != (alloc + free)) {
 		printf("ERROR: Free space size doesn't match\n");
+		printf("------------------------------------------------------------------------\n");
 		return 1;
 	}
 
 	if (cnt != nb_free_blk) {
 		printf("ERROR: Free space block count doesn't match\n");
+		printf("------------------------------------------------------------------------\n");
 		return 1;
 	}
 

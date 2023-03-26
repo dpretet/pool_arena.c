@@ -71,15 +71,19 @@ Parse the free space to find a chunk. Check if current block can contain the req
      - If a block is found, apply (1)
      - If not, return -1
 
+Size requested is always round up to the next size, i.e. 30 bytes are round up to 32, ...
+Size too small, smaller than 3 register size (32 or 64 bits are set as 3 reg_size
+
 ## free()
 
 1. Locate the block to free accross the chained list. nxt/prv pointers are used to move until
    the position is found. Ensure the block is not the last or the first around the space boundary
-2. If next block is contiguous, merge it:
+2. Connect the block to release in the free space chained list
+3. If next block is contiguous, merge it:
   - Erase next block info if existing
   - Add current block size with next block size
   - Update next.nxt block to point to the new current block address
-3. If previous block is contiguous, merge it:
+4. If previous block is contiguous, merge it:
   - update the size of the previous block by adding the chunk size
   - update the current.nxt block's prv pointer to the new merged block address
  ----------------------------------------------------------------------------------------------- */

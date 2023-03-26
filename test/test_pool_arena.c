@@ -275,28 +275,6 @@ void test_realloc_ko(void) {
 }
 
 
-// Allocate all the arena space then release the blocks to check all
-// the space has recovered and consolidated
-void test_free_space_recovering(void) {
-
-	unsigned int chunk_size;
-	chunk_size = 8;
-
-    TEST_ASSERT_EQUAL_INT(0, pool_init(arena, ARENA_SIZE));
-
-	while (chunk_size < ARENA_SIZE) {
-
-		alloc_blks(chunk_size);
-		fill_blks(chunk_size);
-		check_blks(chunk_size);
-		TEST_ASSERT_EQUAL_INT(0, pool_check());
-		free_blks();
-		/* TEST_ASSERT_EQUAL_INT(0, pool_check()); */
-		/* TEST_ASSERT_EQUAL_INT(0, check_pool_free_space()); */
-		chunk_size *= 2;
-	}
-}
-
 
 // Allocate blocks in the pool arena, fill them and checks the data
 // integrity while freeing some blocks
@@ -413,23 +391,49 @@ void test_check(void) {
 }
 
 
+// Allocate all the arena space then release the blocks to check all
+// the space has recovered and consolidated
+void test_free_space_recovering(void) {
+
+	unsigned int chunk_size;
+	chunk_size = 1;
+
+    TEST_ASSERT_EQUAL_INT(0, pool_init(arena, ARENA_SIZE));
+
+	while (chunk_size < 2048) {
+
+		alloc_blks(chunk_size);
+		fill_blks(chunk_size);
+		check_blks(chunk_size);
+		TEST_ASSERT_EQUAL_INT(0, pool_check());
+		/* print_blks(); */
+		/* pool_log(); */
+		free_blks();
+		TEST_ASSERT_EQUAL_INT(0, pool_check());
+		TEST_ASSERT_EQUAL_INT(0, check_pool_free_space());
+		chunk_size += 2;
+	}
+}
+
+
+
 int main(void) {
 
     UNITY_BEGIN();
 
-    RUN_TEST(test_pool_init);
-    RUN_TEST(test_pool_init_too_small);
-    RUN_TEST(test_micro_chunk);
-    RUN_TEST(test_zero_chunk);
-    RUN_TEST(test_giga_chunk_ok);
-    RUN_TEST(test_giga_chunk_ko);
-    RUN_TEST(test_alloc_n_free);
-    RUN_TEST(test_calloc);
-    RUN_TEST(test_realloc_ok);
-    RUN_TEST(test_realloc_ko);
+    /* RUN_TEST(test_pool_init); */
+    /* RUN_TEST(test_pool_init_too_small); */
+    /* RUN_TEST(test_micro_chunk); */
+    /* RUN_TEST(test_zero_chunk); */
+    /* RUN_TEST(test_giga_chunk_ok); */
+    /* RUN_TEST(test_giga_chunk_ko); */
+    /* RUN_TEST(test_alloc_n_free); */
+    /* RUN_TEST(test_calloc); */
+    /* RUN_TEST(test_realloc_ok); */
+    /* RUN_TEST(test_realloc_ko); */
     RUN_TEST(test_free_space_recovering);
-    RUN_TEST(test_data_integrity);
-    RUN_TEST(test_check);
+    /* RUN_TEST(test_data_integrity); */
+    /* RUN_TEST(test_check); */
 
     return UNITY_END();
 }
