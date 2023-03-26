@@ -33,6 +33,7 @@ static blk_t * current;
 static blk_t * tmp_blk;
 // Used to store the original block address before parsing the free space blocks
 static void * tmp_pt;
+static void * pool_addr;
 
 // Used to track arena status during usage and check if no leaks occur
 static int pool_size;
@@ -82,6 +83,7 @@ int pool_init(void * addr, int size) {
     tmp_blk = 0;
     tmp_pt = 0;
 
+	pool_addr = addr;
 	pool_size = size;
     nb_alloc_blk = 0;
 	alloc_space = 0;
@@ -102,7 +104,6 @@ int pool_init(void * addr, int size) {
 
     printf("Init pool arena:\n");
     printf("  - addr: %p\n", addr);
-    printf("  - addr: %p\n", (void *)current);
     printf("  - size: %d\n", current->size);
     printf("  - prv: %p\n", (void *)current->prv);
     printf("  - nxt: %p\n", (void *)current->nxt);
@@ -229,9 +230,8 @@ void * pool_malloc(int size) {
         tmp_blk->prv = free_loc;
     }
 
-	// Move current header if we forked it
-	if (loc == current)
-		current = free_loc;
+	// Move the head pointer of the free space linked list
+	current = free_loc;
 
 	// Setup data block
 	// ----------------
@@ -372,7 +372,7 @@ static inline void * get_loc_to_free(void * addr) {
 	// In case the free block is monolithic, just return its address
 	if (current->prv == NULL && current->nxt == NULL) {
 		#ifdef POOL_ARENA_DEBUG
-		printf("INFO: no prv or nxt pointer\n");
+		printf("  - no prv or nxt pointers\n");
 		#endif
 		return (void *)(current);
 	}
@@ -388,7 +388,7 @@ static inline void * get_loc_to_free(void * addr) {
     // directly the right direction
     if (addr < tmp_pt) {
         while (1) {
-			loc = (blk_t *)(&tmp_blk);
+			loc = (blk_t *)(tmp_blk);
 			// No more free space on smaller address range, so when
 			// can place this block on left of the current tmp / current free space
 			if (tmp_blk->prv == NULL) {
@@ -403,7 +403,7 @@ static inline void * get_loc_to_free(void * addr) {
         }
     } else {
         while (1) {
-			loc = (blk_t *)(&tmp_blk);
+			loc = (blk_t *)(tmp_blk);
 			// No more free space on higher address range, so when
 			// can place this block on right of the current tmp / current free space
 			if (tmp_blk->nxt == NULL) {
@@ -469,96 +469,86 @@ int pool_free(void * addr) {
 	printf("  - free_pt: %p\n", (void *)free_pt);
 	#endif
 
+	// 1. Connect the block into the free space linked list
+	if (blk_pt<free_pt) {
+		blk->nxt = free_pt;
+		if (free_blk->prv != NULL) {
+			blk->prv = free_blk->prv;
+			tmp_blk = (blk_t *)blk->prv;
+			tmp_blk->nxt = blk_pt;
+		}
+		free_blk->prv = blk_pt;
+	} else {
+
+		blk->prv = free_pt;
+		if (free_blk->nxt != NULL) {
+			blk->nxt = free_blk->nxt;
+			tmp_blk = (blk_t *)blk->nxt;
+			tmp_blk->prv = blk_pt;
+		}
+		free_blk->nxt = blk_pt;
+	}
+
 	// Region is used to check if the block to release is adjacent to a free space
 	void * region;
 
-	// 1. Check the block can be merged with the current free space selected
-	if (blk_pt<free_pt) {
-
-		// If block space matches free space start address, merge
-		region = (char *)blk_pt + blk->size + reg_size;
-		if (region == free_pt) {
-			// Move current free block to the new location
-			blk->prv = free_blk->prv;
-			blk->nxt = free_blk->nxt;
-			blk->size += free_blk->size + header_size;
-			// Update statistics
-			nb_free_blk -= 1;
-			free_space += reg_size;
-			// If a next block exists, connect it
-			if (blk->nxt != NULL) {
-				tmp_blk = blk->nxt;
-				tmp_blk->prv = blk_pt;
-			}
-			// If a previsou block exists, connect it
-			if (blk->prv != NULL) {
-				tmp_blk = blk->prv;
-				tmp_blk->nxt = blk_pt;
-			}
-		}
-	} else {
-
-		// if free space range macthes the block start address, merge
-		// in this case, the free space becomes the block to release
-		region = (char *)free_pt + free_blk->size + header_size;
-		if (region == blk_pt) {
-			// Move current free block to the new location
-			free_blk->size += blk->size + reg_size;
-			blk_pt = free_pt;
-			blk = blk_pt;
-			// Update statistics
-			nb_free_blk -= 1;
-			free_space += reg_size;
-		}
-	}
-
-	#ifdef POOL_ARENA_DEBUG
-	printf("  - Update nxt\n");
-	printf("  - %p\n", (void *)blk->nxt);
-	#endif
-
     // 2. Try to merge with next block if exists
     if (blk->nxt != NULL) {
-        // if next block is contiguous the one to free, merge them
+
+		#ifdef POOL_ARENA_DEBUG
+		printf("  - Update nxt\n");
+		printf("  - %p\n", (void *)blk->nxt);
+		#endif
+
         region = (char *)blk_pt + blk->size + reg_size;
+        // if next block is contiguous the one to free, merge them
         if (region == blk->nxt) {
             // extend block size with nxt size
-            tmp_blk = blk->nxt;
+            tmp_blk = (blk_t *)blk->nxt;
             blk->size += tmp_blk->size + reg_size;
-            // link nxt->nxt block with current block
-            tmp_blk = tmp_blk->nxt;
-            tmp_blk->prv = blk_pt;
+			blk->nxt = tmp_blk->nxt;
+			// link nxt->nxt block with the new block
+			if (blk->nxt != NULL) {
+				tmp_blk = (blk_t *)tmp_blk->nxt;
+				tmp_blk->prv = blk_pt;
+			}
 			// Update pool's statistics
 			nb_free_blk -= 1;
 			free_space += reg_size;
         }
     }
 
-	#ifdef POOL_ARENA_DEBUG
-	printf("  - Update prv\n");
-	printf("  - %p\n", (void *)blk->prv);
-	#endif
-
     // 3. Try to merge with previous block if exists
     if (blk->prv != NULL) {
+
+		#ifdef POOL_ARENA_DEBUG
+		printf("  - Update prv\n");
+		printf("  - %p\n", (void *)blk->prv);
+		#endif
+
+        tmp_blk = (blk_t *)blk->prv;
+        region = (char *)blk->prv + tmp_blk->size + reg_size;
         // if previous block is contiguous the one to free, merge them
-        tmp_blk = blk->prv;
-        region = (char *)blk->prv + tmp_blk->size + header_size;
         if (region==blk_pt) {
             // Update previous block by extending its size with blk (to free)
             tmp_blk->size += reg_size + blk->size;
             // Link blk-1 and blk+1 together
             tmp_blk->nxt = blk->nxt;
             // Current block's prv becomes the new current block
-            blk = blk->prv;
-            // blk+1's prv is now linked to orignal blk-1
-            tmp_blk = blk->nxt;
-            tmp_blk->prv = (void *)blk;
+            blk = (blk_t *)blk->prv;
+			// Change nxt block to point to our new suppa block
+			if (blk->nxt != NULL) {
+				tmp_blk = (blk_t *)blk->nxt;
+				tmp_blk->prv = (void *)blk;
+			}
 			// Update pool's statistics
 			nb_free_blk -= 1;
 			free_space += reg_size;
         }
     }
+
+	// move the head pointer the free space linked list
+	current = blk;
 
 	#ifdef POOL_ARENA_DEBUG
 	printf("------------------------------------------------------------------------\n");
@@ -571,6 +561,17 @@ int pool_check(void) {
 
 	int alloc = nb_alloc_blk * reg_size + alloc_space;
 	int free = nb_free_blk * reg_size + free_space;
+	blk_t * tmp = current;
+	int cnt = 0;
+
+	// first rewind the linked list to get the first free space block
+	while (tmp->prv != NULL)
+		tmp = (blk_t *)tmp->prv;
+
+	while (tmp != NULL) {
+		tmp = (blk_t *)tmp->nxt;
+		cnt += 1;
+	}
 
 	printf("\n");
 	printf("------------------------------------------------------------------------\n");
@@ -585,6 +586,7 @@ int pool_check(void) {
 	printf("\n");
 	printf("Free Space\n");
 	printf("  - nb free space: %d\n", nb_free_blk);
+	printf("  - counted nb free space: %d\n", cnt);
 	printf("  - free space: %d\n", free_space);
 	printf("  - total free space: %d\n", free);
 	printf("\n");
@@ -592,6 +594,9 @@ int pool_check(void) {
 	printf("------------------------------------------------------------------------\n");
 
 	if (pool_size != (alloc + free))
+		return 1;
+
+	if (cnt != nb_free_blk)
 		return 1;
 
 	return 0;
@@ -609,15 +614,25 @@ void pool_log(void) {
 
 	printf("\n");
 	printf("------------------------------------------------------------------------\n");
-	printf("Free Space Blocks\n");
+	printf("Pool Arena\n");
+	printf("------------------------------------------------------------------------\n");
+	end = (char *)pool_addr + pool_size - 1;
+	printf("Addr: %p\t", pool_addr);
+	printf("End: %p\t", end);
+	printf("Size: %d\t", pool_size);
+	printf("\n");
 	printf("------------------------------------------------------------------------\n");
 
+	printf("Free Space Blocks\n");
+	printf("------------------------------------------------------------------------\n");
 	// move forward to print one by one the blocks
 	while (tmp != NULL) {
-		end = (char *)tmp + tmp->size - 1;
+		end = (char *)tmp + tmp->size + reg_size - 1;
 		printf("Addr: %p\t", (void*)tmp);
 		printf("End: %p\t", end);
 		printf("Size: %d\t", tmp->size);
+		printf("Prv: %p\t", (void*)tmp->prv);
+		printf("Nxt: %p\t", (void*)tmp->nxt);
 		printf("\n");
 		tmp = (blk_t *)tmp->nxt;
 	}
