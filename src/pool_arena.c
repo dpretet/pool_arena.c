@@ -167,12 +167,12 @@ void * pool_malloc(unsigned int size) {
 	// it in free(). A free block must be composed by some size, prv
 	// and nxt fields at minimum
 	if (size<(2*reg_size))
-		_size = header_size;
+		_size = 2*reg_size /* prv/nxt*/ + reg_size /* size register */;
     // Round up the size up to the arch width. Ensure the size is at minimum a register size and
     // a multiple of that register. So if use 64 bits arch, a 4 bytes allocation is round up
     // to 8 bytes, and 28 bytes is round up to 32 bytes, ...
 	else
-		_size = round_up(&size) + reg_size;
+		_size = round_up(&size) + reg_size /* size register */;
 
 	// Grab a place for our new shinny chunk
 	loc = get_loc_to_place(current, _size);
@@ -196,7 +196,10 @@ void * pool_malloc(unsigned int size) {
     // Update monitoring
 	// ----------------
 	nb_alloc_blk += 1;
-    alloc_space += size;
+	if (size<(2*reg_size))
+		alloc_space += 2*reg_size;
+	else
+		alloc_space += size;
 	free_space -= _size;
 
 	// Update free block
@@ -238,7 +241,10 @@ void * pool_malloc(unsigned int size) {
 
 	// Set the new chunk's size
 	tmp_blk = (blk_t *)loc;
-	tmp_blk->size = size;
+	if (size<(2*reg_size))
+		tmp_blk->size = reg_size*2;
+	else
+		tmp_blk->size = size;
     // Payload's address the application can use
     loc = (char *)loc + reg_size;
     #ifdef POOL_ARENA_DEBUG
@@ -262,7 +268,7 @@ void * pool_calloc(unsigned int size) {
 	if (ptr == NULL) {
 		#ifdef POOL_ARENA_DEBUG
 		printf("ERROR: Failed to allocate the chunk\n");
-		printf("  - current free space: %d\n", current->size);
+		printf("  - current free space: %d\n", free_space);
 		#endif
 		return NULL;
 	}
@@ -593,11 +599,15 @@ int pool_check(void) {
 	printf("Arena vs Computed: %d\n", pool_size - alloc - free);
 	printf("------------------------------------------------------------------------\n");
 
-	if (pool_size != (alloc + free))
+	if (pool_size != (alloc + free)) {
+		printf("ERROR: Free space size doesn't match\n");
 		return 1;
+	}
 
-	if (cnt != nb_free_blk)
+	if (cnt != nb_free_blk) {
+		printf("ERROR: Free space block count doesn't match\n");
 		return 1;
+	}
 
 	return 0;
 }

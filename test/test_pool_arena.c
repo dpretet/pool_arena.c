@@ -126,6 +126,16 @@ void print_blks(void) {
 	printf("------------------------------------------------------------------------\n");
 }
 
+int check_pool_free_space() {
+    void * blk_pt = (char *)arena + reg_size;
+	unsigned int size = pool_get_size(blk_pt);
+	printf("Pool free space: %d\n", size);
+	size += reg_size;
+	if (size != ARENA_SIZE)
+		return 1;
+	return 0;
+}
+
 
 // Just try to create a pool arena
 void test_pool_init(void) {
@@ -265,6 +275,28 @@ void test_realloc_ko(void) {
 }
 
 
+// Allocate all the arena space then release the blocks to check all
+// the space has recovered and consolidated
+void test_free_space_recovering(void) {
+
+	unsigned int chunk_size;
+	chunk_size = 8;
+
+    TEST_ASSERT_EQUAL_INT(0, pool_init(arena, ARENA_SIZE));
+
+	while (chunk_size < ARENA_SIZE) {
+
+		alloc_blks(chunk_size);
+		fill_blks(chunk_size);
+		check_blks(chunk_size);
+		TEST_ASSERT_EQUAL_INT(0, pool_check());
+		free_blks();
+		/* TEST_ASSERT_EQUAL_INT(0, pool_check()); */
+		/* TEST_ASSERT_EQUAL_INT(0, check_pool_free_space()); */
+		chunk_size *= 2;
+	}
+}
+
 
 // Allocate blocks in the pool arena, fill them and checks the data
 // integrity while freeing some blocks
@@ -308,10 +340,9 @@ void test_data_integrity(void) {
 	// Free all blocks
 	free_blks();
     TEST_ASSERT_EQUAL_INT(0, pool_check());
+    TEST_ASSERT_EQUAL_INT(0, check_pool_free_space());
 	pool_log();
 		
-	/* memset(arena, 0, ARENA_SIZE); */
-
 	// Round 2: chunk size 512 bytes
 	chunk_size = 512;
 	alloc_blks(chunk_size);
@@ -333,7 +364,7 @@ void test_data_integrity(void) {
 	// Free all blocks
 	free_blks();
     TEST_ASSERT_EQUAL_INT(0, pool_check());
-	memset(arena, 0, ARENA_SIZE);
+    TEST_ASSERT_EQUAL_INT(0, check_pool_free_space());
 		
 	// Last round trip, blocks smaller than the minimum number of registers
 	// to free a block
@@ -396,6 +427,7 @@ int main(void) {
     RUN_TEST(test_calloc);
     RUN_TEST(test_realloc_ok);
     RUN_TEST(test_realloc_ko);
+    RUN_TEST(test_free_space_recovering);
     RUN_TEST(test_data_integrity);
     RUN_TEST(test_check);
 
